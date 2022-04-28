@@ -1,30 +1,41 @@
 import "./App.css";
 import { useState, useEffect } from "react";
-import { app, database } from "./firebase";
+import { app, database, storage } from "./firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import {
   getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signOut,
 } from "firebase/auth";
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  doc,
+  updateDoc,
+  deleteDoc,
+} from "firebase/firestore";
 
 function App() {
-
-  const [array, setArray] = useState([])
+  const [array, setArray] = useState([]);
   const [data, setData] = useState({
     name: "",
     email: "",
     password: "",
   });
 
+  const [picUrl, setPicUrl] = useState("");
+
   const [coolText, setCoolText] = useState({
-    cool: ' super cool text2'
-  })
-  const [newData, setNewData] = useState("")
+    cool: " andrew",
+  });
+  const [newData, setNewData] = useState("");
+  const [progress, setProgress] = useState(0);
 
   const auth = getAuth();
 
-  const dbInstance = collection(database,'users')
+  const dbInstance = collection(database, "users");
 
   const handleInputs = (e) => {
     let inputs = { [e.target.name]: e.target.value };
@@ -34,7 +45,7 @@ function App() {
   const handleSignin = (e) => {
     signInWithEmailAndPassword(auth, data.email, data.password)
       .then((res) => {
-        alert(res.user)
+        alert(res.user);
         console.log(res.user);
       })
       .catch((err) => {
@@ -42,63 +53,104 @@ function App() {
       });
   };
 
+  const handleSignOut = () => {
+    signOut(auth)
+      .then(() => {
+        alert("you are signedout");
+      })
+      .catch((err) => {
+        console.log(err.message);
+      });
+  };
+
   const handleSubmit = (e) => {
     createUserWithEmailAndPassword(auth, data.email, data.password)
       .then((res) => {
         alert(res.user);
+        return database.collection("users").doc(e.user.uid).set({
+          bio: "testong".value,
+        });
+      })
+      .catch((err) => {
+        alert(err.message);
+      })
+      .then(() => {});
+  };
+
+  const handleDoc = (e) => {
+    addDoc(dbInstance, coolText)
+      .then(() => {
+        alert("Data sent0");
       })
       .catch((err) => {
         alert(err.message);
       });
   };
 
-
-  const handleDoc = (e) => {
-   addDoc(dbInstance, coolText)
-   .then(()=>{
-     alert('Data sent0')
-   })
-   .catch((err) =>{
-     alert(err.message )
-   })
+  const getData = async () => {
+    const dataFetch = await getDocs(dbInstance);
+    // setNewData(dataFetch)
+    setArray(
+      dataFetch.docs.map((item) => {
+        return { ...item.data(), id: item.id };
+      })
+    );
   };
 
-  const getData = async () =>{
-    const dataFetch = await getDocs(dbInstance)
-    // setNewData(dataFetch)
-    setArray(dataFetch.docs.map((item)=>{
-      return{...item.data(), id: item.id}
-    }))
-  }
-
-  const updateData = (id) =>{
-    let dataToUpdate = doc(database, "users", id)
-    updateDoc(dataToUpdate,{
-      name:  'alex',
-      email: 'wild to alex@gmail',
-      password: 'my pass'
+  const updateData = (id) => {
+    let dataToUpdate = doc(database, "users", id);
+    updateDoc(dataToUpdate, {
+      name: "alex",
+      email: "wild to alex@gmail",
+      password: "my pass",
     })
-    .then(()=>{
-      alert('data updated')
-      getData()
-    })
-    .catch((err)=> console.log( err.message))
-}
+      .then(() => {
+        alert("data updated");
+        getData();
+      })
+      .catch((err) => console.log(err.message));
+  };
 
-const deleteData =(id)=>{
-  let dataToDelete = doc(database, 'users', id)
+  const deleteData = (id) => {
+    let dataToDelete = doc(database, "users", id);
     deleteDoc(dataToDelete)
-    .then(()=>{
-      alert('data deleted')
-      getData()
-    })
-    .catch((err)=> console.log( err.message))
-}
+      .then(() => {
+        alert("data deleted");
+        getData();
+      })
+      .catch((err) => console.log(err.message));
+  };
 
-  useEffect(()=>{
-    getData()
-  })
- 
+  useEffect(() => {
+    getData();
+  });
+
+  const uploadFiles = (file) => {
+    if (!file) return;
+    const storageRef = ref(storage, `/files/${file.name}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        const prog = Math.round(
+          (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+        );
+
+        setProgress(prog);
+      },
+      (err) => alert(err),
+      () => {
+        getDownloadURL(uploadTask.snapshot.ref).then((url) => setPicUrl(url));
+      }
+    );
+  };
+
+  const formHandler = (e) => {
+    e.preventDefault();
+    const file = e.target[0].files[0];
+    uploadFiles(file);
+  };
 
   return (
     <div className="App-header">
@@ -117,7 +169,7 @@ const deleteData =(id)=>{
         onChange={(event) => handleInputs(event)}
       />
 
-<input
+      <input
         placeholder="name"
         name="name"
         type="text"
@@ -130,7 +182,9 @@ const deleteData =(id)=>{
       <button className="signin-button" onClick={handleSignin}>
         Signin
       </button>
-
+      <button className="out-button" onClick={handleSignOut}>
+        signout
+      </button>
 
       <button className="signin-button" onClick={handleDoc}>
         Add data
@@ -141,23 +195,32 @@ const deleteData =(id)=>{
       </button>
 
       <button className="update" onClick={updateData}>
-       update
+        update
       </button>
 
-      {array.map((item) =>{
-        return(
+      {array.map((item) => {
+        return (
           <div>
             <p>{item.name}</p>
             <p>{item.email}</p>
             <p>{item.password}</p>
-            <button onClick={()=>updateData(item.id)}>update all</button>
-            <button onClick={()=>deleteData(item.id)}>Delete</button>
+            <button onClick={() => updateData(item.id)}>update all</button>
+            <button onClick={() => deleteData(item.id)}>Delete</button>
             <hr />
           </div>
-        )
+        );
       })}
 
+      <form onSubmit={formHandler}>
+        <input type="file" className="input" />
+        <button type="submit">Upload</button>
+      </form>
+      <hr />
+      <h3>Uploaded {progress}%</h3>
+
       <h1>{newData}</h1>
+
+      <img src={picUrl} alt="" />
     </div>
   );
 }
